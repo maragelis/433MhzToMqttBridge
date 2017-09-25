@@ -1,6 +1,9 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 #include <RCSwitch.h> // library for controling Radio frequency switch
+#include <WiFiManager.h>
+#include <FS.h>   
+#include <ArduinoJson.h>
 
 RCSwitch mySwitch = RCSwitch();
 
@@ -8,9 +11,16 @@ RCSwitch mySwitch = RCSwitch();
 #define TRACE 1  // 0= trace off 1 = trace on
 
 // Update these with values suitable for your network.
-#define wifi_ssid "Maragos2Home"
-#define wifi_password "@th@nas1a2093"
-#define mqtt_server "192.168.2.230"
+//#define wifi_ssid "Maragos2Home"
+//#define wifi_password "@th@nas1a2093"
+//#define mqtt_server "192.168.2.230"
+
+char mqtt_server[40];
+char mqtt_port[6] = "1883";
+
+const char* root_topicOut = "home/433toMQTT";
+const char* root_topicIn = "home/MQTTto433/";
+
 //#define mqtt_user "your_username" // not compulsory if you set it uncomment line 127 and comment line 129
 //#define mqtt_password "your_password" // not compulsory if you set it uncomment line 127 and comment line 129
 
@@ -19,10 +29,17 @@ void callback(char*topic, byte* payload,unsigned int length);
 WiFiClient espClient;
 
 // client parameters
-PubSubClient client(mqtt_server, 1883, callback, espClient);
+PubSubClient client(espClient);
+
+bool shouldSaveConfig = false;
 
 //MQTT last attemps reconnection number
 long lastReconnectAttempt = 0;
+
+void saveConfigCallback () {
+  Serial.println("Should save config");
+  shouldSaveConfig = true;
+}
 
 // Callback function, when the gateway receive an MQTT value on the topics subscribed this function is called
 void callback(char* topic, byte* payload, unsigned int length) {
@@ -53,6 +70,7 @@ void setup()
   Serial.begin(9600);
   //Begining wifi connection
   setup_wifi();
+
   delay(1500);
   lastReconnectAttempt = 0;
   
@@ -61,21 +79,67 @@ void setup()
   mySwitch.enableReceive(5);  // Receiver on pin D1
 }
 
-void setup_wifi() {
-  delay(10);
-  // We start by connecting to a WiFi network
-  WiFi.mode(WIFI_STA);
-  trc("Connecting to ");
-  trc(wifi_ssid);
-
-  WiFi.begin(wifi_ssid, wifi_password);
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    trc(".");
+void setup_wifi(){
+  
+  
+    WiFiManagerParameter custom_mqtt_server("server", "mqtt server", mqtt_server, 40);
+  
+    WiFiManager wifiManager;
+    wifiManager.setSaveConfigCallback(saveConfigCallback);
+    wifiManager.setConfigPortalTimeout(180);
+    
+    wifiManager.addParameter(&custom_mqtt_server);
+    
+    wifiManager.autoConnect(ESP.getChipId() + "433Bridge_AP");
+  
+  
+  strcpy(mqtt_server, custom_mqtt_server.getValue());
+    
+  
+  
+    //if you get here you have connected to the WiFi
+    Serial.println("connected...yeey :)");
+  
+    //read updated parameters
+    strcpy(mqtt_server, custom_mqtt_server.getValue());
+    
+    //save the custom parameters to FS
+    if (shouldSaveConfig) {
+      Serial.println("saving config");
+      DynamicJsonBuffer jsonBuffer;
+      JsonObject& json = jsonBuffer.createObject();
+      json["mqtt_server"] = mqtt_server;
+      
+      File configFile = SPIFFS.open("/config.json", "w");
+      if (!configFile) {
+        Serial.println("failed to open config file for writing");
+      }
+  
+      json.printTo(Serial);
+      json.printTo(configFile);
+      configFile.close();
+      //end save
+    }
+  
+    Serial.println("local ip");
+    Serial.println(WiFi.localIP());
+  
+    
+    Serial.println(custom_mqtt_server.getValue());
+    
+    client.setServer( mqtt_server, 1883);
+    
+    client.setCallback(callback);
+    reconnect();
+  
+    
+    
+    Serial.println("");
+    Serial.println("WiFi connected");
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());
+  
   }
-  trc("WiFi connected");
-}
 
 boolean reconnect() {
   // Loop until we're reconnected
@@ -231,6 +295,40 @@ void sendMQTT(String topicNameSend, String dataStr){
     trc("to ");
     trc(topicNameSend);
 
+}
+
+void mountfs()
+{
+   if (SPIFFS.begin()) {
+    Serial.println("mounted file system");
+    if (SPIFFS.exists("/config.json")) {
+      //file exists, reading and loading
+      Serial.println("reading config file");
+      File configFile = SPIFFS.open("/config.json", "r");
+      if (configFile) {
+        Serial.println("opened config file");
+        size_t size = configFile.size();
+        // Allocate a buffer to store contents of the file.
+        std::unique_ptr<char[]> buf(new char[size]);
+
+        configFile.readBytes(buf.get(), size);
+        DynamicJsonBuffer jsonBuffer;
+        JsonObject& json = jsonBuffer.parseObject(buf.get());
+        json.printTo(Serial);
+        if (json.success()) {
+          Serial.println("\nparsed json");
+
+          strcpy(mqtt_server, json["mqtt_server"]);
+          strcpy(mqtt_port, json["mqtt_port"]);
+          
+        } else {
+          Serial.println("failed to load json config");
+        }
+      }
+    }
+  } else {
+    Serial.println("failed to mount FS");
+  }
 }
 
 //trace
