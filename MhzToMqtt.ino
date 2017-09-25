@@ -64,6 +64,7 @@ void setup()
 void setup_wifi() {
   delay(10);
   // We start by connecting to a WiFi network
+  WiFi.mode(WIFI_STA);
   trc("Connecting to ");
   trc(wifi_ssid);
 
