@@ -14,8 +14,8 @@ RCSwitch mySwitch = RCSwitch();
 // Update these with values suitable for your network.
 
 
-#define mqtt_server "192.168.2.230"
-
+#define mqtt_server       "xxx.cloudmqtt.com"
+#define mqtt_port         "12345"
 
 const char* root_topicOut = "home/433toMQTT";
 const char* root_topicIn = "home/MQTTto433/";
@@ -28,15 +28,16 @@ const char* root_topicIn = "home/MQTTto433/";
 
 WiFiClient espClient;
 // client parameters
-PubSubClient client(mqtt_server,1883 ,espClient);
+PubSubClient client(espClient);
 
 bool shouldSaveConfig = false;
+bool ResetConfig = false;
 
 //MQTT last attemps reconnection number
 long lastReconnectAttempt = 0;
 
 void saveConfigCallback () {
-  Serial.println("Should save config");
+  trc("Should save config");
   shouldSaveConfig = true;
 }
 
@@ -67,11 +68,23 @@ void setup()
 {
   //Launch serial for debugging purposes
   Serial.begin(9600);
+ 
+  pinMode(0,INPUT);
+
+  trc("Waiting for pin 2 press");
+  delay(10000);
+  if (digitalRead(0)==LOW)
+  {
+    trc("Pin 0 Pressed");
+    ResetConfig =true;
+  }
+
+
   trc("Begining wifi connection");
   //SPIFFS.format();
 
   trc("Running MountFs");
-  
+  mountfs();
 
   setup_wifi();
   trc("Finnished wifi setup");
@@ -81,14 +94,52 @@ void setup()
   mySwitch.enableTransmit(4); // RF Transmitter is connected to Pin D2 
   mySwitch.setRepeatTransmit(20); //increase transmit repeat to avoid lost of rf sendings
   mySwitch.enableReceive(5);  // Receiver on pin D1
+
+
 }
 
 void setup_wifi(){
   
-    WiFiManager wifiManager;
+    
+  
+    WiFiManagerParameter custom_mqtt_server("server", "mqtt server", mqtt_server, 40);
+    WiFiManagerParameter custom_mqtt_port("port", "mqtt port", mqtt_port, 6);
 
+  
+    WiFiManager wifiManager;
+    if (ResetConfig)
+    {
+      trc("Resetting wifiManager");
+      WiFi.disconnect();
+      wifiManager.resetSettings();
+    }
+   
+    
+    if (mqtt_server=="" || mqtt_port=="")
+    {
+      trc("Resetting wifiManager");
+      WiFi.disconnect();
+      wifiManager.resetSettings();
+      ESP.reset();
+      delay(1000);
+    }
+    else
+    {
+      trc("values ar no null ");
+    }
+
+
+    wifiManager.setSaveConfigCallback(saveConfigCallback);
+    wifiManager.setConfigPortalTimeout(180);
+    
+    
+    wifiManager.addParameter(&custom_mqtt_server);
+    wifiManager.addParameter(&custom_mqtt_port);
+    
+
+    
     if (!wifiManager.autoConnect("433Bridge_AP", "")) {
-      Serial.println("failed to connect and hit timeout");
+      trc("failed to connect and hit timeout");
       delay(3000);
       //reset and try again, or maybe put it to deep sleep
       ESP.reset();
@@ -97,19 +148,56 @@ void setup_wifi(){
   
   
   
-    //if you get here you have connected to the WiFi
-    Serial.println("connected...yeey :)");
-  
     
-   
-    Serial.println("local ip");
+  
+  
+    //if you get here you have connected to the WiFi
+    trc("connected...yeey :)");
+  
+    //read updated parameters
+    strcpy(mqtt_server, custom_mqtt_server.getValue());
+    strcpy(mqtt_port, custom_mqtt_port.getValue());
+    
+    //save the custom parameters to FS
+    if (shouldSaveConfig) {
+      trc("saving config");
+      DynamicJsonBuffer jsonBuffer;
+      JsonObject& json = jsonBuffer.createObject();
+      json["mqtt_server"] = mqtt_server;
+      json["mqtt_port"] = mqtt_port;
+      
+      File configFile = SPIFFS.open("/config.json", "w");
+      if (!configFile) {
+        trc("failed to open config file for writing");
+      }
+  
+      json.printTo(Serial);
+      json.printTo(configFile);
+      configFile.close();
+      //end save
+    }
+  
+    Serial.print("local ip : ");
     Serial.println(WiFi.localIP());
   
-        
     
-    Serial.println("");
-    Serial.println("WiFi connected");
-    Serial.println("IP address: ");
+    trc("Setting Mqtt Server values");
+    Serial.print("mqtt_server : ");
+    trc(mqtt_server);
+    Serial.print("mqtt_server_port : ");
+    trc(mqtt_port);
+
+    trc("Setting Mqtt Server connection");
+    unsigned int mqtt_port_x = atoi (mqtt_port); 
+    client.setServer(mqtt_server, mqtt_port_x);
+    
+    client.setCallback(callback);
+     reconnect();
+    
+    
+    trc("");
+    trc("WiFi connected");
+    trc("IP address: ");
     Serial.println(WiFi.localIP());
   
   }
@@ -124,10 +212,10 @@ boolean reconnect() {
     // and set username and password at the program beginning
     if (client.connect("433toMQTTto433c")) {
     // Once connected, publish an announcement...
-      client.publish("outTopic","hello world");
+      //client.publish(root_topicOut,"connected");
       trc("connected");
     //Topic subscribed so as to get data
-    String topicNameRec = String("home/MQTTto433/");
+    String topicNameRec = root_topicIn;
     //Subscribing to topic(s)
     subscribing(topicNameRec);
     } else {
@@ -163,7 +251,7 @@ void loop()
   if (mySwitch.available()) {
     // Topic on which we will send data
     trc("Receiving 433Mhz signal");
-    String MQTTsubject = "home/433toMQTT";
+    String MQTTsubject =root_topicOut;
     long MQTTvalue;
     MQTTvalue=mySwitch.getReceivedValue();  
     mySwitch.resetAvailable();
@@ -270,7 +358,48 @@ void sendMQTT(String topicNameSend, String dataStr){
 
 }
 
+void mountfs()
+{
+   if (SPIFFS.begin()) {
+    trc("mounted file system");
+    if (SPIFFS.exists("/config.json")) {
+      //file exists, reading and loading
+      trc("reading config file");
+      File configFile = SPIFFS.open("/config.json", "r");
+      if (configFile) {
+        trc("opened config file");
+        size_t size = configFile.size();
+        // Allocate a buffer to store contents of the file.
+        std::unique_ptr<char[]> buf(new char[size]);
 
+        configFile.readBytes(buf.get(), size);
+        DynamicJsonBuffer jsonBuffer;
+        JsonObject& json = jsonBuffer.parseObject(buf.get());
+        json.printTo(Serial);
+        if (json.success()) {
+          trc("\nparsed json");
+
+          strcpy(mqtt_server, json["mqtt_server"]);
+          strcpy(mqtt_port, json["mqtt_port"]);
+          
+        } else {
+          trc("failed to load json config");
+          
+        }
+      }
+    }
+    else
+    {
+      trc("File /config.json doesnt exist");
+      //SPIFFS.format();
+      trc("Formatted Spiffs");    
+     
+
+    }
+  } else {
+    trc("failed to mount FS");
+  }
+}
 
 //trace
 void trc(String msg){
