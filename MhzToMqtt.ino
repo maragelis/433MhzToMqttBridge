@@ -20,8 +20,8 @@ RCSwitch mySwitch = RCSwitch();
 const char* root_topicOut = "home/433toMQTT";
 const char* root_topicIn = "home/MQTTto433/";
 
-//#define mqtt_user "your_username" // not compulsory if you set it uncomment line 127 and comment line 129
-//#define mqtt_password "your_password" // not compulsory if you set it uncomment line 127 and comment line 129
+//#define mqtt_user "your_username" // not compulsory if you set it uncomment line 211 and comment line 213
+//#define mqtt_password "your_password" // not compulsory if you set it uncomment line 211 and comment line 213
 
 //adding this to bypass to problem of the arduino builder issue 50
 //void callback(char*topic, byte* payload,unsigned int length);
@@ -70,6 +70,7 @@ void setup()
   Serial.begin(9600);
  
   pinMode(0,INPUT);
+  pinMode(2,OUTPUT);
 
   trc("Waiting for pin 2 press");
   delay(10000);
@@ -231,8 +232,10 @@ boolean reconnect() {
 
 void loop()
 {
+
   //MQTT client connexion management
   if (!client.connected()) {
+    digitalWrite(2,LOW);
     long now = millis();
     if (now - lastReconnectAttempt > 5000) {
       lastReconnectAttempt = now;
@@ -244,6 +247,7 @@ void loop()
     }
   } else {
     // MQTT loop
+    digitalWrite(2,HIGH);
     client.loop();
   }
 
