@@ -16,6 +16,9 @@ RCSwitch mySwitch = RCSwitch();
 
 #define mqtt_server       "xxx.cloudmqtt.com"
 #define mqtt_port         "12345"
+#define Hostname          "433MhzBridge"
+
+
 
 const char* root_topicOut = "home/433toMQTT";
 const char* root_topicIn = "home/MQTTto433/";
@@ -29,6 +32,7 @@ const char* root_topicIn = "home/MQTTto433/";
 WiFiClient espClient;
 // client parameters
 PubSubClient client(espClient);
+
 
 bool shouldSaveConfig = false;
 bool ResetConfig = false;
@@ -95,7 +99,7 @@ void setup()
   mySwitch.enableTransmit(4); // RF Transmitter is connected to Pin D2 
   mySwitch.setRepeatTransmit(20); //increase transmit repeat to avoid lost of rf sendings
   mySwitch.enableReceive(5);  // Receiver on pin D1
-
+  wifi_station_set_hostname( Hostname);
 
 }
 
@@ -211,7 +215,11 @@ boolean reconnect() {
     // If you  want to use a username and password, uncomment next line and comment the line if (client.connect("433toMQTTto433")) {
     //if (client.connect("433toMQTTto433", mqtt_user, mqtt_password)) {
     // and set username and password at the program beginning
-    if (client.connect("433toMQTTto433c")) {
+    String mqname =  WiFi.macAddress();
+    char charBuf[50];
+    mqname.toCharArray(charBuf, 50) ;
+
+    if (client.connect(charBuf)) {
     // Once connected, publish an announcement...
       //client.publish(root_topicOut,"connected");
       trc("connected");
