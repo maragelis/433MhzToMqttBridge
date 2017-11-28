@@ -402,8 +402,8 @@ void receivingMQTT(String topicNameRec, String getReceivedValue, int getReceived
 
     const char* b = dec2binWzerofill(data, 24);
     trc(String(b));
-    mySwitch.sendTriState(bin2tristate( b));
-    trc(bin2tristate( b));
+    mySwitch.sendTriState(bin2tristate(b));
+    trc(bin2tristate(b));
     trc("Finnished");
 }
 
