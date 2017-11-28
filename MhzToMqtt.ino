@@ -14,14 +14,14 @@ RCSwitch mySwitch = RCSwitch();
 // Update these with values suitable for your network.
 
 
-#define mqtt_server       "xxx.cloudmqtt.com"
-#define mqtt_port         "12345"
-#define Hostname          "433MhzBridge"
+#define mqtt_server       "192.168.2.230"
+#define mqtt_port         "1883"
+#define Hostname          "433MhzBridge2"
 
 
 
 const char* root_topicOut = "home/433toMQTT";
-const char* root_topicIn = "home/MQTTto433/";
+const char* root_topicIn = "home/MQTTto433";
 
 //#define mqtt_user "your_username" // not compulsory if you set it uncomment line 211 and comment line 213
 //#define mqtt_password "your_password" // not compulsory if you set it uncomment line 211 and comment line 213
@@ -40,9 +40,48 @@ bool ResetConfig = false;
 //MQTT last attemps reconnection number
 long lastReconnectAttempt = 0;
 
+struct JsonPayload{
+  String Topic;
+  String getReceivedValue;
+  int getReceivedBitlength;
+  int getReceivedProtocol;
+  int  getReceivedDelay;
+} ;
+
+
 void saveConfigCallback () {
   trc("Should save config");
   shouldSaveConfig = true;
+}
+
+struct JsonPayload Decodejson(char* Payload) 
+{
+ JsonPayload data;
+  DynamicJsonBuffer jsonBuffer;
+  JsonObject& root = jsonBuffer.parseObject(Payload);
+  if (!root.success()) {
+     data = {"","",0,0,0};
+    Serial.println("JSON parsing failed!");
+    return data;
+  } else
+ {
+   String topic = root["topic"];
+   Serial.println(topic);
+   String payload1 = root["getReceivedValue"];
+   int payload2 = root["getReceivedBitlength"];
+   int payload3 = root["getReceivedProtocol"];
+   int payload4 = root["getReceivedDelay"];
+
+   Serial.println(payload1);
+
+    JsonPayload data1 = {topic,payload1,payload2,payload3,payload4};
+    return data1;
+   
+    
+ }
+    
+  
+  return data;
 }
 
 // Callback function, when the gateway receive an MQTT value on the topics subscribed this function is called
@@ -51,27 +90,28 @@ void callback(char* topic, byte* payload, unsigned int length) {
   // as the orignal payload buffer will be overwritten whilst
   // constructing the PUBLISH packet.
   trc("Hey I got a callback ");
-  // Allocate the correct amount of memory for the payload copy
-  byte* p = (byte*)malloc(length);
-  // Copy the payload to the new buffer
-  memcpy(p,payload,length);
   
+  
+
+
   // Conversion to a printable string
-  p[length] = '\0';
-  String callbackstring = String((char *) p);
+  payload[length] = '\0';
+  String callbackstring = String((char *) payload);
   String topicNameRec = String((char*) topic);
   
-  //launch the function to treat received data
-  receivingMQTT(topicNameRec,callbackstring);
+  JsonPayload data = Decodejson((char *) payload);
+  Serial.println("JSON Returned! ====");
+  Serial.println(data.getReceivedDelay);
+  trc("launch the function to treat received data");
+  receivingMQTT(topicNameRec,data.getReceivedValue,data.getReceivedDelay);
 
-  // Free the memory
-  free(p);
+ 
 }
 
 void setup()
 {
   //Launch serial for debugging purposes
-  Serial.begin(9600);
+  Serial.begin(115200);
  
   pinMode(0,INPUT);
   pinMode(2,OUTPUT);
@@ -265,12 +305,22 @@ void loop()
     trc("Receiving 433Mhz signal");
     String MQTTsubject =root_topicOut;
     long MQTTvalue;
-    MQTTvalue=mySwitch.getReceivedValue();  
+    MQTTvalue=mySwitch.getReceivedValue(); 
+    int ReceivedBitlength = mySwitch.getReceivedBitlength();
+    int ReceivedProtocol =mySwitch.getReceivedProtocol();
+    int ReceivedDelay =mySwitch.getReceivedDelay();
+    Serial.print("Rawdata=");
+    Serial.println((int)mySwitch.getReceivedRawdata());
+    String MQmessage = CreateJsonString(MQTTvalue,ReceivedBitlength,ReceivedProtocol,ReceivedDelay);
+    //output(mySwitch.getReceivedValue(), mySwitch.getReceivedBitlength(), mySwitch.getReceivedDelay(), mySwitch.getReceivedRawdata(),mySwitch.getReceivedProtocol());
+    
     mySwitch.resetAvailable();
     if (client.connected()) {
       trc("Sending 433Mhz signal to MQTT");
       trc(String(MQTTvalue));
-      sendMQTT(MQTTsubject,String(MQTTvalue));
+     // sendMQTT(MQTTsubject,String(MQTTvalue));
+      sendMQTT(MQTTsubject,MQmessage);
+      
     } else {
       if (reconnect()) {
         sendMQTT(MQTTsubject,String(MQTTvalue));
@@ -332,7 +382,7 @@ static const char* bin2tristate(const char* bin) {
 }
 
 
-void receivingMQTT(String topicNameRec, String callbackstring) {
+void receivingMQTT(String topicNameRec, String getReceivedValue, int getReceivedDelay) {
   trc("Receiving data by MQTT");
   trc(topicNameRec);
   char topicOri[26] = "";
@@ -340,19 +390,21 @@ void receivingMQTT(String topicNameRec, String callbackstring) {
   char datacallback[26] = "";
   
   // Below you send RF signal following data value received by MQTT 
-    callbackstring.toCharArray(datacallback,26);
-    trc(datacallback);
+   getReceivedValue.toCharArray(datacallback,26);
+    trc(getReceivedValue);
     long int data = atol(datacallback);
     trc("Send received data by RF 433");
     trc(String(data));
     //send received MQTT value by RF signal (example of signal sent data = 5264660)
-    mySwitch.setPulseLength(199);
+    mySwitch.setPulseLength(getReceivedDelay);
     mySwitch.send(data, 24);
-    
+    trc("success sending data");
+
     const char* b = dec2binWzerofill(data, 24);
     trc(String(b));
     mySwitch.sendTriState(bin2tristate( b));
     trc(bin2tristate( b));
+    trc("Finnished");
 }
 
 //send MQTT data dataStr to topic topicNameSend
@@ -412,6 +464,13 @@ void mountfs()
     trc("failed to mount FS");
   }
 }
+
+String CreateJsonString(long ReceivedValue, int ReceivedBitlength,int ReceivedProtocol  ,int ReceivedDelay)
+{
+  String retval = "{ \"payload\":{ \"getReceivedValue\":" + String(ReceivedValue) + ", \"getReceivedBitlength\":" + String(ReceivedBitlength) + ", \"getReceivedProtocol\":" + String(ReceivedProtocol) + ", \"getReceivedDelay\":" + String(ReceivedDelay) + "}}";
+  return retval;
+}
+
 
 //trace
 void trc(String msg){
