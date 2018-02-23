@@ -5,6 +5,10 @@
 #include <RCSwitch.h> // library for controling Radio frequency switch
 #include <WiFiManager.h>
 #include <ArduinoJson.h>
+#include <ArduinoOTA.h>
+#include <homeGW.h>
+#include <digoo.h>
+
 
 RCSwitch mySwitch = RCSwitch();
 
@@ -17,11 +21,16 @@ RCSwitch mySwitch = RCSwitch();
 #define mqtt_server       "192.168.2.230"
 #define mqtt_port         "1883"
 #define Hostname          "433MhzBridge2"
+#define RF_RECEIVER_PIN 5
 
 
 
 const char* root_topicOut = "home/433toMQTT";
 const char* root_topicIn = "home/MQTTto433";
+
+HomeGW gw(1);
+digoo station1;
+uint64_t prev_p = 0;
 
 //#define mqtt_user "your_username" // not compulsory if you set it uncomment line 211 and comment line 213
 //#define mqtt_password "your_password" // not compulsory if you set it uncomment line 211 and comment line 213
@@ -133,13 +142,20 @@ void setup()
 
   setup_wifi();
   trc("Finnished wifi setup");
+  ArduinoOTA.setHostname(Hostname);
+  ArduinoOTA.begin();
+  
   delay(1500);
   lastReconnectAttempt = 0;
   
   mySwitch.enableTransmit(4); // RF Transmitter is connected to Pin D2 
   mySwitch.setRepeatTransmit(20); //increase transmit repeat to avoid lost of rf sendings
   mySwitch.enableReceive(5);  // Receiver on pin D1
-  wifi_station_set_hostname( Hostname);
+
+  gw.setup(RF_RECEIVER_PIN);
+	gw.registerPlugin(&station1); 
+
+  wifi_station_set_hostname(Hostname);
 
 }
 
@@ -278,8 +294,45 @@ boolean reconnect() {
   return client.connected();
 }
 
+void    DoDigoo()
+{
+   uint64_t p = 0;
+  StaticJsonBuffer<160> jsonBuffer;
+  JsonObject& root = jsonBuffer.createObject();
+
+	if(station1.available()) 
+		if((p = station1.getPacket())) {
+		  if(p == prev_p) {
+
+  			root[F("dev")] = "digoo";
+  			root[F("id")] = station1.getId(p);
+  			root[F("ch")] = station1.getChannel(p);
+  			root[F("batt")] = station1.getBattery(p);
+  			root[F("temp")] = station1.getTemperature(p);
+  			root[F("hum")] = station1.getHumidity(p);
+  			root[F("raw")] = station1.getString(p);
+  
+        //root.printTo(Serial);
+        //sendMQTT()
+        char jsonChar[100];
+        root.printTo((char*)jsonChar, root.measureLength() + 1);
+        sendMQTTChar(root_topicOut,jsonChar);
+        p = 0;
+         
+		  }
+      prev_p = p;
+    }
+}
+
+
 void loop()
 {
+ ArduinoOTA.handle();
+
+ if(station1.available()) 
+ {
+   DoDigoo();
+ }
 
   //MQTT client connexion management
   if (!client.connected()) {
@@ -417,6 +470,19 @@ void sendMQTT(String topicNameSend, String dataStr){
     boolean pubresult = client.publish(topicStrSend,dataStrSend);
     trc("sending ");
     trc(dataStr);
+    trc("to ");
+    trc(topicNameSend);
+
+}
+
+void sendMQTTChar(String topicNameSend, char* dataChar){
+
+    char topicStrSend[26];
+    topicNameSend.toCharArray(topicStrSend,26);
+    
+    boolean pubresult = client.publish(topicStrSend,dataChar);
+    trc("sending ");
+    trc(dataChar);
     trc("to ");
     trc(topicNameSend);
 
