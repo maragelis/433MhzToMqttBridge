@@ -46,16 +46,36 @@ void HomeGW::registerPlugin(Plugin *p) {
 }
 
 bool HomeGW::setup(uint8_t pin) {
-  
+
+  bool isESP = false;
+
+#if defined(ESP8266)
+  isESP = true;
+#endif
+
+  if (!isESP && (!(pin == 3 || pin == 2)))
+  {
+    return false;
+  }
 
   HomeGW::pin = pin;
 
   pinMode(pin, INPUT);
   digitalWrite(pin, LOW);
+  uint8_t interuptPin;
 
-  attachInterrupt(pin, HomeGW::handleInterrupt, CHANGE); // 1 = PIN3
+  if (!isESP)
+  {
+    interuptPin = pin - 2;
+  }
+  else
+  {
+    interuptPin = pin;
+  }
 
-  return true;
+  attachInterrupt(interuptPin, HomeGW::handleInterrupt, CHANGE); // 1 = PIN3
+
+  return true
 }
 
 void HomeGW::handleInterrupt() {
