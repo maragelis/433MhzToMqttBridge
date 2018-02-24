@@ -46,16 +46,14 @@ void HomeGW::registerPlugin(Plugin *p) {
 }
 
 bool HomeGW::setup(uint8_t pin) {
-  if(!(pin == 3 || pin == 2)) {
-    return false;
-  }
+  
 
   HomeGW::pin = pin;
 
   pinMode(pin, INPUT);
   digitalWrite(pin, LOW);
 
-  attachInterrupt(pin-2, HomeGW::handleInterrupt, CHANGE); // 1 = PIN3
+  attachInterrupt(pin, HomeGW::handleInterrupt, CHANGE); // 1 = PIN3
 
   return true;
 }

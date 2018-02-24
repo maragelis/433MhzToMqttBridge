@@ -25,8 +25,11 @@ RCSwitch mySwitch = RCSwitch();
 
 
 
-const char* root_topicOut = "hometest/433toMQTT";
-const char* root_topicIn = "hometest/MQTTto433";
+const char* root_topicOut = "home/433toMQTT";
+
+const char *weather_topicOut = "home/WeatherStation";
+
+const char* root_topicIn = "home/MQTTto433_1";
 
 HomeGW gw(1);
 digoo station1;
@@ -317,7 +320,7 @@ void    DoDigoo()
         //sendMQTT()
         char jsonChar[100];
         root.printTo((char*)jsonChar, root.measureLength() + 1);
-        sendMQTTChar(root_topicOut,jsonChar);
+        sendMQTTChar(weather_topicOut, jsonChar);
         p = 0;
          
 		  }
