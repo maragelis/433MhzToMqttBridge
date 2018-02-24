@@ -13,20 +13,20 @@
 RCSwitch mySwitch = RCSwitch();
 
 //Do we want to see trace for debugging purposes
-#define TRACE 1  // 0= trace off 1 = trace on
+#define TRACE 0  // 0= trace off 1 = trace on
 
 // Update these with values suitable for your network.
 
 
 #define mqtt_server       "192.168.2.230"
 #define mqtt_port         "1883"
-#define Hostname          "433MhzBridge2"
-#define RF_RECEIVER_PIN 5
+#define Hostname          "433MhzBridge3"
+#define RF_RECEIVER_PIN 14
 
 
 
-const char* root_topicOut = "home/433toMQTT";
-const char* root_topicIn = "home/MQTTto433";
+const char* root_topicOut = "hometest/433toMQTT";
+const char* root_topicIn = "hometest/MQTTto433";
 
 HomeGW gw(1);
 digoo station1;
@@ -126,7 +126,7 @@ void setup()
   pinMode(2,OUTPUT);
 
   trc("Waiting for pin 2 press");
-  delay(10000);
+  delay(1000);
   if (digitalRead(0)==LOW)
   {
     trc("Pin 0 Pressed");
@@ -151,6 +151,7 @@ void setup()
   mySwitch.enableTransmit(4); // RF Transmitter is connected to Pin D2 
   mySwitch.setRepeatTransmit(20); //increase transmit repeat to avoid lost of rf sendings
   mySwitch.enableReceive(5);  // Receiver on pin D1
+  
 
   gw.setup(RF_RECEIVER_PIN);
 	gw.registerPlugin(&station1); 
@@ -310,9 +311,9 @@ void    DoDigoo()
   			root[F("batt")] = station1.getBattery(p);
   			root[F("temp")] = station1.getTemperature(p);
   			root[F("hum")] = station1.getHumidity(p);
-  			root[F("raw")] = station1.getString(p);
+  			root[F("raw")] = "";
   
-        //root.printTo(Serial);
+        root.printTo(Serial);
         //sendMQTT()
         char jsonChar[100];
         root.printTo((char*)jsonChar, root.measureLength() + 1);
@@ -331,6 +332,7 @@ void loop()
 
  if(station1.available()) 
  {
+   trc("Got data");
    DoDigoo();
  }
 
@@ -352,9 +354,9 @@ void loop()
     client.loop();
   }
 
-  // Receive loop, if data received by RF433 send it by MQTT to MQTTsubject
+  //Receive loop, if data received by RF433 send it by MQTT to MQTTsubject
   if (mySwitch.available()) {
-    // Topic on which we will send data
+    
     trc("Receiving 433Mhz signal");
     String MQTTsubject =root_topicOut;
     long MQTTvalue;
