@@ -23,6 +23,7 @@ RCSwitch mySwitch = RCSwitch();
 #define Hostname          "433MhzBridge3"
 #define RF_RECEIVER_PIN 14
 
+#define UseDigooCTL false
 
 
 const char* root_topicOut = "home/433toMQTT";
@@ -30,6 +31,7 @@ const char* root_topicOut = "home/433toMQTT";
 const char *weather_topicOut = "home/WeatherStation";
 
 const char* root_topicIn = "home/MQTTto433_1";
+
 
 HomeGW gw(1);
 digoo station1;
@@ -58,6 +60,7 @@ struct JsonPayload{
   int getReceivedBitlength;
   int getReceivedProtocol;
   int  getReceivedDelay;
+  String ControllerName;
 } ;
 
 
@@ -72,7 +75,7 @@ struct JsonPayload Decodejson(char* Payload)
   DynamicJsonBuffer jsonBuffer;
   JsonObject& root = jsonBuffer.parseObject(Payload);
   if (!root.success()) {
-     data = {"","",0,0,0};
+     data = {"","",0,0,0,""};
     Serial.println("JSON parsing failed!");
     return data;
   } else
@@ -86,7 +89,7 @@ struct JsonPayload Decodejson(char* Payload)
 
    Serial.println(payload1);
 
-    JsonPayload data1 = {topic,payload1,payload2,payload3,payload4};
+    JsonPayload data1 = {topic,payload1,payload2,payload3,payload4,""};
     return data1;
    
     
@@ -103,9 +106,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
   // constructing the PUBLISH packet.
   trc("Hey I got a callback ");
   
-  
-
-
   // Conversion to a printable string
   payload[length] = '\0';
   String callbackstring = String((char *) payload);
@@ -155,12 +155,14 @@ void setup()
   mySwitch.setRepeatTransmit(20); //increase transmit repeat to avoid lost of rf sendings
   mySwitch.enableReceive(5);  // Receiver on pin D1
   
-
-  gw.setup(RF_RECEIVER_PIN);
-	gw.registerPlugin(&station1); 
+  if (UseDigooCTL)
+  {
+    gw.setup(RF_RECEIVER_PIN);
+	  gw.registerPlugin(&station1); 
+  }
 
   wifi_station_set_hostname(Hostname);
-
+  
 }
 
 void setup_wifi(){
@@ -333,11 +335,14 @@ void loop()
 {
  ArduinoOTA.handle();
 
- if(station1.available()) 
- {
-   trc("Got data");
-   DoDigoo();
- }
+  if (UseDigooCTL)
+  {
+    if(station1.available()) 
+    {
+      trc("Got data");
+      DoDigoo();
+    }
+  }
 
   //MQTT client connexion management
   if (!client.connected()) {
@@ -538,7 +543,7 @@ void mountfs()
 
 String CreateJsonString(long ReceivedValue, int ReceivedBitlength,int ReceivedProtocol  ,int ReceivedDelay)
 {
-  String retval = "{ \"payload\":{ \"getReceivedValue\":" + String(ReceivedValue) + ", \"getReceivedBitlength\":" + String(ReceivedBitlength) + ", \"getReceivedProtocol\":" + String(ReceivedProtocol) + ", \"getReceivedDelay\":" + String(ReceivedDelay) + "}}";
+  String retval = "{ \"payload\":{ \"getReceivedValue\":" + String(ReceivedValue) + ", \"getReceivedBitlength\":" + String(ReceivedBitlength) + ", \"getReceivedProtocol\":" + String(ReceivedProtocol) + ", \"getReceivedDelay\":" + String(ReceivedDelay) + ", \"HostController\":" + Hostname + "}}";
   return retval;
 }
 
