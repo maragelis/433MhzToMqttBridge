@@ -20,7 +20,7 @@ RCSwitch mySwitch = RCSwitch();
 
 #define mqtt_server       "192.168.2.230"
 #define mqtt_port         "1883"
-#define Hostname          "433MhzBridge3"
+#define Hostname          "433MhzBridgeKIT"
 #define RF_RECEIVER_PIN 14
 
 #define UseDigooCTL false
@@ -30,7 +30,7 @@ const char* root_topicOut = "home/433toMQTT";
 
 const char *weather_topicOut = "home/WeatherStation";
 
-const char* root_topicIn = "home/MQTTto433_1";
+const char* root_topicIn = "home/MQTTto433";
 
 
 HomeGW gw(1);
@@ -124,7 +124,8 @@ void setup()
 {
   //Launch serial for debugging purposes
   Serial.begin(115200);
- 
+  WiFi.mode(WIFI_STA);
+  
   pinMode(0,INPUT);
   pinMode(2,OUTPUT);
 
@@ -205,7 +206,7 @@ void setup_wifi(){
     
 
     
-    if (!wifiManager.autoConnect("433Bridge_AP", "")) {
+    if (!wifiManager.autoConnect("433Bridge_APKIT", "")) {
       trc("failed to connect and hit timeout");
       delay(3000);
       //reset and try again, or maybe put it to deep sleep
@@ -266,6 +267,7 @@ void setup_wifi(){
     trc("WiFi connected");
     trc("IP address: ");
     Serial.println(WiFi.localIP());
+    //sendMQTT(root_topicOut,"TEST");
   
   }
 
@@ -386,7 +388,7 @@ void loop()
       
     } else {
       if (reconnect()) {
-        sendMQTT(MQTTsubject,String(MQTTvalue));
+        sendMQTT(MQTTsubject,String(MQmessage));
         lastReconnectAttempt = 0;
       }
     }
@@ -543,7 +545,7 @@ void mountfs()
 
 String CreateJsonString(long ReceivedValue, int ReceivedBitlength,int ReceivedProtocol  ,int ReceivedDelay)
 {
-  String retval = "{ \"payload\":{ \"getReceivedValue\":" + String(ReceivedValue) + ", \"getReceivedBitlength\":" + String(ReceivedBitlength) + ", \"getReceivedProtocol\":" + String(ReceivedProtocol) + ", \"getReceivedDelay\":" + String(ReceivedDelay) + ", \"HostController\":" + Hostname + "}}";
+  String retval = "{ \"payload\":{ \"getReceivedValue\":" + String(ReceivedValue) + ", \"getReceivedBitlength\":" + String(ReceivedBitlength) + ", \"getReceivedProtocol\":" + String(ReceivedProtocol) + ", \"getReceivedDelay\":" + String(ReceivedDelay) + ", \"HostController\":\"" + Hostname + "\"}}";
   return retval;
 }
 
