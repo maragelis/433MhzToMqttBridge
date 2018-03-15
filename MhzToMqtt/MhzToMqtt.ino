@@ -20,17 +20,17 @@ RCSwitch mySwitch = RCSwitch();
 
 #define mqtt_server       "192.168.2.230"
 #define mqtt_port         "1883"
-#define Hostname          "433MhzBridgeKIT"
+#define Hostname          "433MhzBridgeBTH"
 #define RF_RECEIVER_PIN 14
 
-#define UseDigooCTL false
+#define UseDigooCTL true
 
 
 const char* root_topicOut = "home/433toMQTT";
 
 const char *weather_topicOut = "home/WeatherStation";
 
-const char* root_topicIn = "home/MQTTto433";
+const char* root_topicIn = "home/MQTTto433/1";
 
 
 HomeGW gw(1);
@@ -206,7 +206,7 @@ void setup_wifi(){
     
 
     
-    if (!wifiManager.autoConnect("433Bridge_APKIT", "")) {
+    if (!wifiManager.autoConnect("433Bridge_APBTH", "")) {
       trc("failed to connect and hit timeout");
       delay(3000);
       //reset and try again, or maybe put it to deep sleep
